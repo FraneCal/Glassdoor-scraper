@@ -11,6 +11,7 @@ from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.chromium.remote_connection import ChromiumRemoteConnection
 from selenium.webdriver import Remote, ChromeOptions
 from dotenv import load_dotenv
+import json
 
 # load_dotenv()
 
@@ -166,16 +167,38 @@ class MondayMarketPlaceScraper():
         self.scrape_jobs()
 
     def scrape_jobs(self):
-        boxs = self.soup.find_all("div", class_="JobCard_jobCardWrapper__vX29z")
+        job_cards = self.soup.find_all("div",class_="jobCard JobCard_jobCardContent__JQ5Rq JobCardWrapper_easyApplyLabelNoWrap__PtpgT")
 
-        job_names = []
+        jobs = []
 
-        for box in boxs:
-            name = self.soup.find("a", class_="JobCard_jobTitle__GLyJ1").getText()
-            job_names.append(name)
+        for card in job_cards:
+            job_data = {}
 
-        for job in job_names:
-            print(job)
+            title_tag = card.find("a", class_="JobCard_jobTitle__GLyJ1")
+            if title_tag:
+                job_data["title"] = title_tag.getText(strip=True)
+                job_data["link"] = title_tag.get("href")
+
+            location_tag = card.find("div", class_="JobCard_location__Ds1fM")
+            if location_tag:
+                job_data["location"] = location_tag.getText(strip=True)
+
+            employeer_tag = card.find("div", class_="EmployerProfile_profileContainer__63w3R EmployerProfile_compact__28h9t")
+            if employeer_tag:
+                job_data["employeer"] = employeer_tag.getText(strip=True)
+
+            short_description_tag = card.find("div", class_="JobCard_jobDescriptionSnippet__l1tnl")
+            if short_description_tag:
+                job_data["short description"] = short_description_tag.getText(strip=True)
+
+            if job_data:  # Only add non-empty entries
+                jobs.append(job_data)
+
+        # Save to JSON
+        with open("jobs.json", "w", encoding="utf-8") as f:
+            json.dump(jobs, f, ensure_ascii=False, indent=2)
+
+        print(f"[INFO] Saved {len(jobs)} jobs to jobs.json.")
 
 if __name__ == "__main__":
     # URL = f"https://www.glassdoor.com/Job/jobs.htm?sc.keyword={JOB_NAME.lower()}&locT=C&locId=&locKeyword={LOCATION.lower()}"
