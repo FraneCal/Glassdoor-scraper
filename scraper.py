@@ -11,6 +11,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
+import json
 from dotenv import load_dotenv
 
 # load_dotenv()
@@ -22,37 +23,37 @@ PROXY_DNS = ""
 
 # Job name and location
 JOB_NAME = "javascript"
-LOCATION = "germany"
+LOCATION = "spain"
 
 class MondayMarketPlaceScraper():
     def __init__(self) -> None:
         '''Initializes Selenium WebDriver and sets up proxy'''
         print("[INFO] Initializing WebDriver...")
-        self.proxy_url = self.get_proxy()
+        # self.proxy_url = self.get_proxy()
         self.setup_driver()
 
-    def get_proxy(self):
-        """
-        Returns a dictionary with proxy credentials formatted for HTTP/S use.
-        """
-        proxy_url = f"http://{TWOCAPTCHA_USERNAME}:{TWOCAPTCHA_PASSWORD}@{PROXY_DNS}"
-        return proxy_url
-
-    def check_ip(self, proxy):
-        """
-        Returns the current external IP and country using the configured proxy.
-        """
-        print("[INFO] Checking proxy IP address...")
-        try:
-            response = requests.get("http://ip-api.com/json", proxies=proxy, timeout=10)
-            ip_data = response.json()
-            ip_address = ip_data.get('query', 'Unknown')
-            country = ip_data.get('country', 'Unknown')
-            print(f"[INFO] Current Proxy IP: {ip_address} ({country})")
-            return ip_address, country
-        except requests.exceptions.RequestException:
-            print("[WARNING] Failed to fetch IP address. Proxy might be blocked!")
-            return "Failed", "Unknown"
+    # def get_proxy(self):
+    #     """
+    #     Returns a dictionary with proxy credentials formatted for HTTP/S use.
+    #     """
+    #     proxy_url = f"http://{TWOCAPTCHA_USERNAME}:{TWOCAPTCHA_PASSWORD}@{PROXY_DNS}"
+    #     return proxy_url
+    #
+    # def check_ip(self, proxy):
+    #     """
+    #     Returns the current external IP and country using the configured proxy.
+    #     """
+    #     print("[INFO] Checking proxy IP address...")
+    #     try:
+    #         response = requests.get("http://ip-api.com/json", proxies=proxy, timeout=10)
+    #         ip_data = response.json()
+    #         ip_address = ip_data.get('query', 'Unknown')
+    #         country = ip_data.get('country', 'Unknown')
+    #         print(f"[INFO] Current Proxy IP: {ip_address} ({country})")
+    #         return ip_address, country
+    #     except requests.exceptions.RequestException:
+    #         print("[WARNING] Failed to fetch IP address. Proxy might be blocked!")
+    #         return "Failed", "Unknown"
 
     def setup_driver(self):
         '''Configures the Selenium WebDriver (Chrome) with proxy'''
@@ -75,11 +76,11 @@ class MondayMarketPlaceScraper():
         print(f"[INFO] Navigating to URL: {URL}")
         try:
             self.driver.get(URL)
-            print("[INFO] Page loaded. Waiting for job list container...")
-
-            WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "#left-column > div.JobsList_wrapper__EyUF6 > ul"))
-            )
+            # print("[INFO] Page loaded. Waiting for job list container...")
+            #
+            # WebDriverWait(self.driver, 10).until(
+            #     EC.presence_of_element_located((By.CSS_SELECTOR, "#left-column > div.JobsList_wrapper__EyUF6 > ul"))
+            # )
 
             # Accept cookies
             try:
@@ -144,7 +145,6 @@ class MondayMarketPlaceScraper():
     def bs4_initialization(self):
         '''Fetches the page source using Selenium and initializes BeautifulSoup for parsing the HTML content.'''
         self.page_source = self.driver.page_source
-        self.driver.quit()
 
         self.soup = BeautifulSoup(self.page_source, "html.parser")
 
@@ -152,23 +152,46 @@ class MondayMarketPlaceScraper():
         self.scrape_jobs()
 
     def scrape_jobs(self):
-        boxs = self.soup.find_all("div", class_="JobCard_jobCardWrapper__vX29z")
+        job_cards = self.soup.find_all("div",class_="jobCard JobCard_jobCardContent__JQ5Rq JobCardWrapper_easyApplyLabelNoWrap__PtpgT")
 
-        job_names = []
+        jobs = []
 
-        for box in boxs:
-            name = self.soup.find("a", class_="JobCard_jobTitle__GLyJ1").getText()
-            job_names.append(name)
+        for card in job_cards:
+            job_data = {}
 
-        for job in job_names:
-            print(job)
+            title_tag = card.find("a", class_="JobCard_jobTitle__GLyJ1")
+            if title_tag:
+                job_data["title"] = title_tag.getText(strip=True)
+                job_data["link"] = title_tag.get("href")
+
+            location_tag = card.find("div", class_="JobCard_location__Ds1fM")
+            if location_tag:
+                job_data["location"] = location_tag.getText(strip=True)
+
+            employeer_tag = card.find("div", class_="EmployerProfile_profileContainer__63w3R EmployerProfile_compact__28h9t")
+            if employeer_tag:
+                job_data["employeer"] = employeer_tag.getText(strip=True)
+
+            short_description_tag = card.find("div", class_="JobCard_jobDescriptionSnippet__l1tnl")
+            if short_description_tag:
+                job_data["short description"] = short_description_tag.getText(strip=True)
+
+            if job_data:  # Only add non-empty entries
+                jobs.append(job_data)
+
+        # Save to JSON
+        with open("jobs.json", "w", encoding="utf-8") as f:
+            json.dump(jobs, f, ensure_ascii=False, indent=2)
+
+        print(f"[INFO] Saved {len(jobs)} jobs to jobs.json.")
 
 if __name__ == "__main__":
-    URL = f"https://www.glassdoor.com/Job/jobs.htm?sc.keyword={JOB_NAME.lower()}&locT=C&locId=&locKeyword={LOCATION.lower()}"
+    URL = "https://www.glassdoor.com/Job/luxembourg-java-jobs-SRCH_IL.0,10_IC2941423_KO11,15.htm"
+    # URL = f"https://www.glassdoor.com/Job/jobs.htm?sc.keyword={JOB_NAME.lower()}&locT=C&locId=&locKeyword={LOCATION.lower()}"
     print("[INFO] Script started.")
 
     scraper = MondayMarketPlaceScraper()
-    proxy_ip, country = scraper.check_ip({"http": scraper.proxy_url, "https": scraper.proxy_url})
+    # proxy_ip, country = scraper.check_ip({"http": scraper.proxy_url, "https": scraper.proxy_url})
 
     try:
         scraper.scrolling_and_pagination(URL)
